@@ -1,0 +1,83 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Resources:
+  wasanlambda:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: index.handler
+      Runtime: nodejs8.10
+      CodeUri: ./index.zip
+      FunctionName: 'wasanlambda'
+      Role: !GetAtt WasanLambdaRole.Arn
+
+  WasanLambdaRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: 'wasanlambdarole'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies: 
+        - 
+          PolicyName: 'wasanreads3'
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - 
+                Effect: 'Allow'
+                Action:
+                  - 's3:Get*'
+                  - 's3:List*'
+                Resource: "*"
+        -
+          PolicyName: 'wasanaddtodynamodb'
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - 
+                Effect: "Allow"
+                Action: "dynamodb:*"
+                Resource: "*"
+
+  InvokePermissions:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+        Action: 'lambda:InvokeFunction'
+        FunctionName: !Ref wasanlambda
+        Principal: s3.amazonaws.com
+        SourceAccount: !Ref 'AWS::AccountId'
+        SourceArn: !Sub 'arn:aws:s3:::wasans3bucket'
+
+  wasans3:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: 'wasans3bucket'
+      AccessControl: BucketOwnerFullControl
+      NotificationConfiguration:
+        LambdaConfigurations:
+          -
+            Event: 's3:ObjectCreated:*'
+            Function: !GetAtt wasanlambda.Arn
+    DependsOn : InvokePermissions
+
+  wasanTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      AttributeDefinitions: 
+        - 
+          AttributeName: "id"
+          AttributeType: "S"
+      KeySchema: 
+        - 
+          AttributeName: "id"
+          KeyType: "HASH"
+      ProvisionedThroughput: 
+        ReadCapacityUnits: "5"
+        WriteCapacityUnits: "5"
+      TableName: 'wasantable'
